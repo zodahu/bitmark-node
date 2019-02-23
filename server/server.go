@@ -55,6 +55,7 @@ type WebServer struct {
 	peerPortReachable bool
 	Bitmarkd          services.Service
 	Recorderd         services.Service
+	Mapd              services.Service
 	Accounts          []AccountInfo
 	versionURL        string
 	SnapshotInfo      *snapshotInfo
@@ -84,7 +85,7 @@ func (s *snapshotInfo) get(versionURL string) ([]byte, error) {
 	return body, nil
 }
 
-func NewWebServer(nc *config.BitmarkNodeConfig, rootPath string, bitmarkd, recorderd services.Service, versionURL string) *WebServer {
+func NewWebServer(nc *config.BitmarkNodeConfig, rootPath string, bitmarkd, recorderd, mapd services.Service, versionURL string) *WebServer {
 	return &WebServer{
 		Mutex:      &sync.Mutex{},
 		nodeConfig: nc,
@@ -92,6 +93,7 @@ func NewWebServer(nc *config.BitmarkNodeConfig, rootPath string, bitmarkd, recor
 		log:        logger.New("webserver"),
 		Bitmarkd:   bitmarkd,
 		Recorderd:  recorderd,
+		Mapd:       mapd,
 		versionURL: versionURL,
 		SnapshotInfo: &snapshotInfo{
 			Date:   "",
@@ -271,6 +273,46 @@ func (ws *WebServer) RecorderdStartStop(c *gin.Context) {
 		c.String(400, "invalid option")
 		return
 	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"ok":  0,
+			"msg": err.Error(),
+		})
+	} else {
+		c.JSON(http.StatusOK, map[string]interface{}{
+			"ok": 1,
+		})
+	}
+}
+
+func (ws *WebServer) MapdStartStop(c *gin.Context) {
+	var req ServiceOptionRequest
+	err := c.BindJSON(&req)
+	if err != nil {
+		c.String(400, "can not parse action option")
+		return
+	}
+
+	err = nil
+	switch req.Option {
+	case "start":
+		err = ws.Mapd.Start()
+	case "stop":
+		err = ws.Mapd.Stop()
+	case "status":
+		c.JSON(http.StatusOK, map[string]interface{}{
+			"ok":     1,
+			"result": ws.Mapd.Status(),
+		})
+		return
+	default:
+		c.String(400, "invalid map option")
+		return
+	}
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"ok": 1,
+	})
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]interface{}{

@@ -57,6 +57,22 @@
           </Box>
           <!-- End: box -->
         </div>
+        <div class="row__box">
+          <Box :class="{'running': this.mapd.status.started, 'stop-running': !this.mapd.status.started}" title="Node Map">
+            <button slot="header-button" class="btn-start" @click="toggleMapd">{{ this.mapd.status.started ? 'Stop' : 'Start' }}</button>
+            <ul>
+              <li>
+                <span class="label ">Status:</span>
+                <span class="status ">{{ this.mapd.status.started ? "Running" : "Stopped" }}</span>
+              </li>
+              <li>
+                <span class="label ">Server IP/Port:</span>
+                <span class="status ">{{ this.mapd.status.ipPort}}</span>
+              </li>
+            </ul>
+          </Box>
+          <!-- End: box -->
+        </div>
       </div>
       <div class="divider "></div>
       <template v-if="bitmarkdInfo">
@@ -250,6 +266,36 @@
           })
       },
 
+      toggleMapd() {
+        if (this.mapd.status.started) {
+          this.stopMapd()
+        } else {
+          this.startMapd()
+        }
+      },
+
+      startMapd() {
+        this.mapd.status = ""
+        this.mapd.errorMsg = ""
+        axios.post("/api/" + "mapd", {
+            option: "start"
+          })
+          .catch((err, resp) => {
+            this.mapd.errorMsg = err.response.data.msg
+          })
+      },
+
+      stopMapd() {
+        this.mapd.status = ""
+        this.mapd.errorMsg = ""
+        axios.post("/api/" + "mapd", {
+            option: "stop"
+          })
+          .catch((err, resp) => {
+            this.mapd.errorMsg = err.response.data.msg
+          })
+      },
+
 
       openConfig() {
         this.$emit("openPaymentConfig")
@@ -330,6 +376,7 @@
       let t1 = setInterval(() => {
         this.fetchStatus('bitmarkd')
         this.fetchStatus('recorderd')
+        this.fetchStatus('mapd')
         this.fetchBlockInfo()
         this.getBitmarkdConnectionStatus()
       }, 2000)
@@ -364,6 +411,12 @@
           error: ""
         },
         recorderd: {
+          errorMsg: "",
+          querying: false,
+          status: "",
+          error: ""
+        },
+        mapd: {
           errorMsg: "",
           querying: false,
           status: "",

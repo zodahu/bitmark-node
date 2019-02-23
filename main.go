@@ -76,18 +76,23 @@ func main() {
 
 	bitmarkdPath := filepath.Join(rootPath, "bitmarkd")
 	recorderdPath := filepath.Join(rootPath, "recorderd")
+	mapdPath := filepath.Join(rootPath, "mapd")
 	dbPath := filepath.Join(rootPath, "db")
 
 	err = os.MkdirAll(bitmarkdPath, 0755)
 	err = os.MkdirAll(recorderdPath, 0755)
+	err = os.MkdirAll(mapdPath, 0755)
 	err = os.MkdirAll(dbPath, 0755)
 
 	bitmarkdService := services.NewBitmarkd(containerIP)
 	recorderdService := services.NewRecorderd()
+	mapdService := services.NewMapd()
 	bitmarkdService.Initialise(bitmarkdPath)
 	defer bitmarkdService.Finalise()
 	recorderdService.Initialise(recorderdPath)
 	defer recorderdService.Finalise()
+	mapdService.Initialise(mapdPath)
+	defer mapdService.Finalise()
 
 	nodeConfig := config.New()
 	err = nodeConfig.Initialise(dbPath)
@@ -98,6 +103,7 @@ func main() {
 	if network := nodeConfig.GetNetwork(); network != "" {
 		bitmarkdService.SetNetwork(network)
 		recorderdService.SetNetwork(network)
+		mapdService.SetNetwork(network)
 	}
 
 	webserver := server.NewWebServer(
@@ -105,6 +111,7 @@ func main() {
 		rootPath,
 		bitmarkdService,
 		recorderdService,
+		mapdService,
 		masterConfig.VersionURL,
 	)
 	go webserver.CheckPortReachableRoutine(os.Getenv("PUBLIC_IP"), "2136")
@@ -132,6 +139,7 @@ func main() {
 	apiRouter.GET("/log/:serviceName", webserver.GetLog)
 	apiRouter.POST("/snapshot", webserver.DownloadSnapshot)
 	apiRouter.GET("/snapshot-info", webserver.GetSnapshotInfo)
+	apiRouter.POST("/mapd", webserver.MapdStartStop)
 
 	r.Run(fmt.Sprintf(":%d", masterConfig.Port))
 }
