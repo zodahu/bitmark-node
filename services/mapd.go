@@ -169,17 +169,15 @@ func (mapd *Mapd) Start() error {
 					continue
 				}
 
-				TimeDiff := time.Since(peerReplies[i].Timestamp).String()
-
 				register := "http://" + os.Getenv("MAP_IP_PORT") + "/register"
 				n := &Node{
 					PublicKey: peerReplies[i].PublicKey,
 					Ip:        ip,
 					Height:    height,
-					Lat:       0,
+					Lat:       0, // map server will get Lat, Lng
 					Lng:       0,
 					Timestamp: peerReplies[i].Timestamp,
-					TimeDiff:  TimeDiff,
+					TimeDiff:  "", // map server will calculates TimeDiff
 				}
 				data, _ := json.Marshal(n)
 				body := bytes.NewReader([]byte(data))
