@@ -135,61 +135,26 @@ func (mapd *Mapd) Start() error {
 		for mapd.running {
 			time.Sleep(time.Second * 3)
 
+			// register self node
 			var detailReply DetailReply
 			err := mapd.getBitmarkdApi("details", &detailReply)
 			if err != nil {
 				continue
 			}
+			err = mapd.registerSelf(detailReply)
+			if err != nil {
+				continue
+			}
 
-			publicKey := detailReply.PublicKey
-
+			// register peer nodes
 			var peerReplies []PeerReply
 			err = mapd.getBitmarkdApi("peers", &peerReplies)
 			if err != nil {
 				continue
 			}
-
-			for i := range peerReplies {
-				var height uint64
-				mapd.mapdLog("%v", peerReplies[i])
-				if peerReplies[i].PublicKey == publicKey {
-					height = detailReply.Blocks.Local
-				}
-
-				ips := peerReplies[i].Listeners
-				var ip string
-				for j := range ips {
-					// ipv4 checker
-					if strings.Contains(ips[j], ".") {
-						// remove port
-						ip = strings.Split(ips[j], ":")[0]
-						break
-					}
-				}
-
-				// skip this peer if ip is empty
-				if len(ip) == 0 {
-					continue
-				}
-
-				register := "http://" + os.Getenv("MAP_IP_PORT") + "/register"
-				n := &Node{
-					PublicKey: peerReplies[i].PublicKey,
-					Ip:        ip,
-					Height:    height,
-					Lat:       0, // map server will get Lat, Lng
-					Lng:       0,
-					Timestamp: peerReplies[i].Timestamp,
-					TimeDiff:  "", // map server will calculates TimeDiff
-				}
-				data, _ := json.Marshal(n)
-				body := bytes.NewReader([]byte(data))
-				resp, err := http.Post(register, "application/json", body)
-				if err != nil {
-					mapd.mapdLog("unable to post register info")
-					continue
-				}
-				defer resp.Body.Close()
+			err = mapd.registerPeers(peerReplies)
+			if err != nil {
+				continue
 			}
 		}
 	}()
@@ -231,6 +196,77 @@ func (mapd *Mapd) getBitmarkdApi(api string, reply interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func (mapd *Mapd) registerSelf(detailReply DetailReply) error {
+	n := &Node{
+		PublicKey: detailReply.PublicKey,
+		Ip:        os.Getenv("SERVER_IP"),
+		Height:    detailReply.Blocks.Local,
+		Lat:       0, // map server will get lat and Lng
+		Lng:       0,
+		Timestamp: time.Now(),
+		TimeDiff:  "", // map server will calculates TimeDiff
+	}
+
+	err := mapd.sendNodeToMapServer(n)
+	if err != nil {
+		mapd.mapdLog("unable to post registerSelf info")
+		return err
+	}
+
+	return err
+}
+
+func (mapd *Mapd) registerPeers(peerReplies []PeerReply) error {
+	for i := range peerReplies {
+		mapd.mapdLog("%v", peerReplies[i])
+
+		ips := peerReplies[i].Listeners
+		var ip string
+		for j := range ips {
+			// ipv4 checker
+			if strings.Contains(ips[j], ".") {
+				// remove port
+				ip = strings.Split(ips[j], ":")[0]
+				break
+			}
+		}
+
+		// skip this peer if ip is empty
+		if len(ip) == 0 {
+			continue
+		}
+
+		n := &Node{
+			PublicKey: peerReplies[i].PublicKey,
+			Ip:        ip,
+			Height:    0, // peer node has no height info
+			Lat:       0, // map server will get lat and Lng
+			Lng:       0,
+			Timestamp: peerReplies[i].Timestamp,
+			TimeDiff:  "", // map server will calculates TimeDiff
+		}
+
+		if err := mapd.sendNodeToMapServer(n); err != nil {
+			mapd.mapdLog("unable to post registerPeers info")
+			continue
+		}
+	}
+	return nil
+}
+
+func (mapd *Mapd) sendNodeToMapServer(n *Node) error {
+	register := "http://" + os.Getenv("MAP_IP_PORT") + "/register"
+	data, _ := json.Marshal(n)
+	body := bytes.NewReader([]byte(data))
+	resp, err := http.Post(register, "application/json", body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return err
 }
 
 func (mapd *Mapd) mapdLog(format string, a ...interface{}) {
