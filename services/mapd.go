@@ -135,13 +135,16 @@ func (mapd *Mapd) Start() error {
 		for mapd.running {
 			time.Sleep(time.Second * 3)
 
-			detailReply, err := mapd.getDetailReply()
+			var detailReply DetailReply
+			err := mapd.getBitmarkdApi("details", &detailReply)
 			if err != nil {
 				continue
 			}
+
 			publicKey := detailReply.PublicKey
 
-			peerReplies, err := mapd.getPeerReplies()
+			var peerReplies []PeerReply
+			err = mapd.getBitmarkdApi("peers", &peerReplies)
 			if err != nil {
 				continue
 			}
@@ -205,58 +208,29 @@ func (mapd *Mapd) Stop() error {
 	return nil
 }
 
-func (mapd *Mapd) getPeerReplies() ([]PeerReply, error) {
-	var reply []PeerReply
-
-	resp, err := client.Get("https://127.0.0.1:2131/bitmarkd/peers")
+func (mapd *Mapd) getBitmarkdApi(api string, reply interface{}) error {
+	resp, err := client.Get("https://127.0.0.1:2131/bitmarkd/" + api)
 	if err != nil {
-		mapd.mapdLog("unable to get bitmark peers, retry it")
+		mapd.mapdLog("unable to get bitmark api, retry it")
 		time.Sleep(time.Second * 5)
-		return reply, err
+		return err
 	}
 	defer resp.Body.Close()
 	bb := bytes.Buffer{}
 	io.Copy(&bb, resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		mapd.mapdLog("unable to get bitmark peers. message: %s", bb.String())
-		return reply, err
+		mapd.mapdLog("unable to get bitmark api. message: %s", bb.String())
+		return err
 	}
 
 	d := json.NewDecoder(&bb)
 
-	if err := d.Decode(&reply); err != nil {
-		mapd.mapdLog("fail to read bitmark peers response. error: %s\n", err.Error())
-		return reply, err
+	if err := d.Decode(reply); err != nil {
+		mapd.mapdLog("fail to read bitmark api response. error: %s\n", err.Error())
+		return err
 	}
-	return reply, nil
-}
-
-func (mapd *Mapd) getDetailReply() (DetailReply, error) {
-	var reply DetailReply
-
-	resp, err := client.Get("https://127.0.0.1:2131/bitmarkd/details")
-	if err != nil {
-		mapd.mapdLog("unable to get bitmark details, retry it")
-		time.Sleep(time.Second * 5)
-		return reply, err
-	}
-	defer resp.Body.Close()
-	bb := bytes.Buffer{}
-	io.Copy(&bb, resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		mapd.mapdLog("unable to get bitmark details. message: %s", bb.String())
-		return reply, err
-	}
-
-	d := json.NewDecoder(&bb)
-
-	if err := d.Decode(&reply); err != nil {
-		mapd.mapdLog("fail to read bitmark details response. error: %s\n", err.Error())
-		return reply, err
-	}
-	return reply, nil
+	return nil
 }
 
 func (mapd *Mapd) mapdLog(format string, a ...interface{}) {
